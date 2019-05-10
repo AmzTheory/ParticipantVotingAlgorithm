@@ -1,53 +1,50 @@
-import com.sun.security.ntlm.Server;
-import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils;
-
 import java.io.IOException;
 import java.net.ServerSocket;
-import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Random;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class Participant implements Runnable {
+    ServerSocket participantServer;
     int serverPort;
     int id;
     int timeout=5000;
     String optionChosen;
-    SpecialSocket socket;
-    HashMap<Integer,SpecialSocket> participants;
-    HashMap<Integer,SpecialSocket> serverSockets;//used to keep track of all server to be able to comunicate  back with the participant with the same socket
+    SpecialSocket socketServer;
+//    HashMap<Integer,SpecialSocket> participants;
+    ArrayList<Integer> participants;
     HashMap<Integer,String> participantVotes;
     ArrayList<String> options;
     public Participant(int id,int serverPort) throws IOException {
         this.serverPort=serverPort;
         this.id=id;
-        socket=new SpecialSocket(serverPort);
-        participants=new HashMap<>();
+        participantServer = new ServerSocket(this.id);
+        socketServer =new SpecialSocket(serverPort);
+        participants=new ArrayList<>();
         participantVotes=new HashMap<>();
         options=new ArrayList<>();
     }
 
     public void join()throws IOException{
         String msg="JOIN "+id;
-        socket.writeString(msg);
+        socketServer.writeString(msg);
 
-        String msgReq=socket.getString();
+        String msgReq= socketServer.getString();
         connectToParticipant(msgReq);
 
-        listenToParticpants();//communicate with other participants
-        establishConnectionWithAll();
-
-        String msgVotes=socket.getString();
+        String msgVotes= socketServer.getString();
         storeVotes(msgVotes);
 
-        sendVote();//send the participant votes to all of the other participants
+        listForVotes();//getVotes from other participants
+
+
     }
     private void establishConnectionWithAll() throws IOException {
-        for (Integer key:this.participants.keySet()) {
-            participants.put(key,new SpecialSocket(key));
-            participants.get(key).writeString(Integer.toString(id));//inform the server socket about ur id
+        SpecialSocket soc;
+        for (Integer key:this.participants) {
+            soc=new SpecialSocket(key);
+            soc.writeString(Integer.toString(id));//inform the server socketServer about ur id
         }
     }
     private void connectToParticipant(String msg) throws IOException{
@@ -59,7 +56,7 @@ public class Participant implements Runnable {
         for(String part:listOfParticpant){
             temp=Integer.parseInt(part);
             if(temp!=id) {//check that its not itself
-                participants.put(temp, null);
+                participants.add(temp);
             }
         }
     }
@@ -140,6 +137,86 @@ public class Participant implements Runnable {
         //handle errors
     }
 
+    //concerning round 1
+    private void listForVotes() throws IOException {
+        //round 1 (with timeout)
+        LinkedList<SpecialSocket> specialSockets=new LinkedList<>();
+        //separate thread to listen for participant
+        Thread listenVotes =new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    int j = 0;
+                    SpecialSocket sp;
+                    while (j < getParticipantsSize()) {
+                        specialSockets.offer(new SpecialSocket(participantServer.accept()));
+                        j++;
+                    }
+                } catch (IOException ex) {
+                }
+
+            }
+        });
+        //participant need to send its vote
+        listenVotes.start();
+        try {
+            sendVote();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        try {
+            Thread.sleep(timeout);
+        }catch (InterruptedException exp){}
+
+        listenVotes.interrupt();
+        String msg;
+        for(SpecialSocket inst:specialSockets){
+            msg=inst.getString();
+            System.out.println(id+" RECEIVE: "+msg);
+            storeVoteOption(msg);
+        }
+    }
+//    private void listForResults() throws IOException {
+//        //round 1 (with timeout)
+//        LinkedList<SpecialSocket> specialSockets=new LinkedList<>();
+//        //separate thread to listen for participant
+//        Thread listenVotes =new Thread(new Runnable() {
+//            @Override
+//            public void run() {
+//                try {
+//                    int j = 0;
+//                    SpecialSocket sp;
+//                    while (j < getParticipantsSize()) {
+//                        specialSockets.offer(new SpecialSocket(participantServer.accept()));
+//                        j++;
+//                    }
+//                } catch (IOException ex) {
+//                }
+//
+//            }
+//        });
+//        //participant need to send its vote
+//        listenVotes.start();
+//        try {
+//            sendVote();
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
+//        try {
+//            Thread.sleep(timeout);
+//        }catch (InterruptedException exp){}
+//
+//        listenVotes.interrupt();
+//        String msg;
+//        for(SpecialSocket inst:specialSockets){
+//            msg=inst.getString();
+//            System.out.println(id+" RECEIVE: "+msg);
+//            storeVoteOption(msg);
+//        }
+//    }
+
+    //concerning round 2
+
     //round #1
     public void storeVoteOption(String msgVote){
         String words[]=msgVote.split(" ");
@@ -163,10 +240,9 @@ public class Participant implements Runnable {
         SpecialSocket temp;
         String msg;
         //send the vote to all of the participants
-        for (Integer idp: this.participants.keySet()) {
-            temp= this.participants.get(idp);
+        for (Integer idp: this.participants) {
             msg="VOTE "+this.id+" "+optionChosen;
-            temp.writeString(msg);
+            new SpecialSocket(idp).writeString(msg);
             System.out.println("SEND: "+msg+"  from -> "+this.id+"  to -> "+idp);
         }
     }
@@ -175,7 +251,9 @@ public class Participant implements Runnable {
     public void sendVotesToThers() throws IOException{
         String msg=formatSendVotesMessage();
         //send the vote results to all participants
-        for (SpecialSocket soc:this.participants.values()) {
+        SpecialSocket soc;
+        for (Integer key:this.participants) {
+            soc=new SpecialSocket(key);
             soc.writeString(msg);
             System.out.println("SEND: "+msg+"  from -> "+this.id+"  to -> "+soc.getSocket().getPort());
         }
@@ -198,7 +276,6 @@ public class Participant implements Runnable {
 
     //receive of round #2
     private void getVotesFromParticipant() throws IOException{
-        //wait until you've received all of the votes(this could be done outside)
 
         for (SpecialSocket soc:this.participants.values()) {
             soc.getString();

@@ -20,7 +20,7 @@ public class Comms {
            SpecialSocket socket = null;
            try {
                socket = new SpecialSocket();
-            //   socket.writeMessage(msg);
+            //   socketServer.writeMessage(msg);
            }catch (Exception exp) {
 
            }
@@ -29,7 +29,7 @@ public class Comms {
 
     public static String receiveMessage(SpecialSocket socket){
         try {
-           // Message message=socket.getMessage();
+           // Message message=socketServer.getMessage();
             socket.close();
             return "";
         }catch (Exception exp){
