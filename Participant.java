@@ -123,8 +123,8 @@ public class Participant implements Runnable {
                     String msg;
                     for(SpecialSocket inst:specialSockets){
                         msg=inst.getString();
-                        System.out.println("RECEIVE:");
-                        storeVoteOption(ins.get);
+                        System.out.println(id+" RECEIVE: "+msg);
+                        storeVoteOption(inst.getString());
                     }
                     //round 2
 
