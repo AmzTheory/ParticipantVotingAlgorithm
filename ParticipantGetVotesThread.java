@@ -18,7 +18,7 @@ public class ParticipantGetVotesThread extends Thread {
             System.out.println("RECEIVE: "+msg +"   in -> "+this.soc.getSocket().getLocalPort());
             part.storeVoteOption(msg);
             //here this particular should be ready for round#2
-            part.sendVotesToThers();
+            part.sendVotesToOthers();
         }catch (IOException ex){
         }
     }

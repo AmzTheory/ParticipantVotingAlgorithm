@@ -7,9 +7,9 @@ public class Main {
             Coordinator cord = new Coordinator(cordPort, 3);
             runRunnable(cord);
 
-            Participant one=new Participant(1001,cordPort);
-            Participant two=new Participant(1002,cordPort);
-            Participant three=new Participant(1003,cordPort);
+            Participant one=new Participant(1001,cordPort,0);
+            Participant two=new Participant(1002,cordPort,1);
+            Participant three=new Participant(1003,cordPort,0);
             runRunnable(one);
             runRunnable(two);
             runRunnable(three);

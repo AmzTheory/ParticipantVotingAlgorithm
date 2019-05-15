@@ -2,6 +2,7 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 public class Coordinator implements Runnable {
@@ -15,7 +16,7 @@ public class Coordinator implements Runnable {
         serverSocket=new ServerSocket(port);
         this.numberOfParticipants=numberOfParticipants;
         this.participants=new HashMap<>(numberOfParticipants);
-        this.options=new ArrayList<>();
+        this.options=new ArrayList<  >();
         options.add("A");
         options.add("B");
         options.add("C");
@@ -25,7 +26,9 @@ public class Coordinator implements Runnable {
     public void run() {
         try {
             this.listenForParticipant();
-        }catch (Exception exp){}
+        }catch (Exception exp){
+            exp.printStackTrace();
+        }
     }
 
     public void listenForParticipant() throws IOException{
@@ -40,7 +43,8 @@ public class Coordinator implements Runnable {
         }
         sendDetails();
         sendVoteoptions();
-        sendOutcome();
+        String outcome=getOutcome();
+        System.out.println("Coordinator print the results :"+outcome);
 
     }
     private void addToSockets(Integer id,SpecialSocket soc){
@@ -67,17 +71,54 @@ public class Coordinator implements Runnable {
         participants.values().stream().forEach(x->send(x,msg));
     }
 
-    private void sendOutcome(){
-        //wait until
-        for(Integer id:participants.keySet()){
-            String outcome=getOutcome();
-            final String msg=formString(options,"OUTCOME");//this line is not done
-            participants.values().stream().forEach(x->send(x,msg));
+    private String getOutcome()throws IOException{
+            String msg;
+            for (Map.Entry<Integer, SpecialSocket> en : this.participants.entrySet()) {
+                try {
+                en.getValue().getSocket().setSoTimeout(1000);
+                msg=en.getValue().getString();
+                System.out.println("Coordinator RECEIVE:From " + en.getKey() + ": " + msg);
+                en.getValue().close();//close the connection between this particular participant
+                participants.remove(en.getKey());   //not needed any mo
+                updateParticipant(msg);
+                getOutComeFromRest();
+                return msg;
+                }catch (IOException exe){
+
+                }
+            }
+
+           return getOutcome();//use recursion
+        //return outcome;
+    }
+    private void updateParticipant(String msg){
+        String split[]=msg.split(" ");
+        ArrayList<Integer> participantVotes=stringsToInt(2,split);
+        for(Integer key:this.participants.keySet()){
+            if(!participantVotes.contains(key))//in case the participant haven't vote
+                this.participants.get(key).close();
+                //this.participants.remove(key);//remove cause the implies the participant has failed during the vote
         }
     }
+    private void getOutComeFromRest() throws IOException{
+        String msg;
+        for (Map.Entry<Integer, SpecialSocket> en : this.participants.entrySet()) {
+                try {
+                    en.getValue().getSocket().setSoTimeout(1000);
+                    msg = en.getValue().getString();
+                    en.getValue().close();//close the connection
+                    System.out.println("Coordinator RECEIVE:From " + en.getKey() + ": " + msg);
+                }catch (IOException exe){
 
-    private String getOutcome(){
-        return "dummy";
+                }
+        }
+    }
+    private ArrayList<Integer> stringsToInt(int startIndex,String split[]){
+        ArrayList<Integer> list=new ArrayList<>();
+        for (int i=startIndex;i<split.length;i++){
+            list.add(Integer.parseInt(split[i]));
+        }
+        return list;
     }
     private String formString(ArrayList<? extends Object> ids,String title){
         String ret=title;
@@ -97,3 +138,4 @@ public class Coordinator implements Runnable {
     }
 
 }
+
