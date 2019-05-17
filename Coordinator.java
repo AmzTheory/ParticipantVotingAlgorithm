@@ -3,10 +3,9 @@ import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 
 public class Coordinator implements Runnable {
-    static int port;
+    int port;
     ServerSocket serverSocket;
     int numberOfParticipants;
     HashMap<Integer,SpecialSocket> participants;
@@ -20,6 +19,18 @@ public class Coordinator implements Runnable {
         options.add("A");
         options.add("B");
         options.add("C");
+    }
+    public Coordinator(String[] args) throws IOException {
+        this.port=Integer.parseInt(args[0]);
+        serverSocket=new ServerSocket(port);
+        this.numberOfParticipants=Integer.parseInt(args[1]);
+        this.participants=new HashMap<>(numberOfParticipants);
+
+        this.options=new ArrayList<  >();
+        for(int i=2;i<args.length;i++)
+            options.add(args[i]);//add the options
+
+        //ready
     }
 
     @Override
@@ -41,10 +52,21 @@ public class Coordinator implements Runnable {
             addToSockets(id,soc);
             i++;
         }
+        setUpVote();
+        System.exit(0);
+    }
+    private void setUpVote()throws IOException{
         sendDetails();
         sendVoteoptions();
-        String outcome=getOutcome();
-        System.out.println("Coordinator print the results :"+outcome);
+        getState();
+        String out=getOutCome();
+        if(out.equals("")){
+            String op=options.get(options.size()-1);
+            options.remove(options.size()-1);//remove last one
+            System.out.println("Draw : "+op);
+            setUpVote();
+        }else
+            System.out.println("Coordinator print the results :"+out);
 
     }
     private void addToSockets(Integer id,SpecialSocket soc){
@@ -70,27 +92,42 @@ public class Coordinator implements Runnable {
         String msg=formString(options,"VOTE_OPTIONS ");
         participants.values().stream().forEach(x->send(x,msg));
     }
-
-    private String getOutcome()throws IOException{
-            String msg;
-            for (Map.Entry<Integer, SpecialSocket> en : this.participants.entrySet()) {
-                try {
-                en.getValue().getSocket().setSoTimeout(1000);
+    private void getState(){
+        String msg;
+        ArrayList<Integer> listremove=new ArrayList<>();
+        for (Map.Entry<Integer, SpecialSocket> en : this.participants.entrySet()) {
+            try {
                 msg=en.getValue().getString();
-                System.out.println("Coordinator RECEIVE:From " + en.getKey() + ": " + msg);
-                en.getValue().close();//close the connection between this particular participant
-                participants.remove(en.getKey());   //not needed any mo
-                updateParticipant(msg);
-                getOutComeFromRest();
-                return msg;
-                }catch (IOException exe){
+                if(msg.equals("FAIL")){//crashe somewhere which implies don't expect OUTCOME message
+                    en.getValue().close();//close the connection between this particular participant
+                   // participants.remove(en.getKey());   //not needed any mo
+                    listremove.add(en.getKey());
+                }//otherwise DONE
 
-                }
+            }catch (IOException exe){};
             }
-
-           return getOutcome();//use recursion
-        //return outcome;
+        listremove.forEach(x->participants.remove(x));//removed carshed keys
     }
+//    private String getOutcome()throws IOException{
+//            String msg;
+//            for (Map.Entry<Integer, SpecialSocket> en : this.participants.entrySet()) {
+//                try {
+//                en.getValue().getSocket().setSoTimeout(1000);
+//                msg=en.getValue().getString();
+//                System.out.println("Coordinator RECEIVE:From " + en.getKey() + ": " + msg);
+//                en.getValue().close();//close the connection between this particular participant
+//                participants.remove(en.getKey());   //not needed any mo
+//                updateParticipant(msg);
+//                getOutComeFromRest();
+//                return msg;
+//                }catch (IOException exe){
+//
+//                }
+//            }
+//
+//           return getOutcome();//use recursion
+//        //return outcome;
+//    }
     private void updateParticipant(String msg){
         String split[]=msg.split(" ");
         ArrayList<Integer> participantVotes=stringsToInt(2,split);
@@ -100,18 +137,20 @@ public class Coordinator implements Runnable {
                 //this.participants.remove(key);//remove cause the implies the participant has failed during the vote
         }
     }
-    private void getOutComeFromRest() throws IOException{
-        String msg;
+    private String getOutCome() throws IOException{
+        String msg="";
         for (Map.Entry<Integer, SpecialSocket> en : this.participants.entrySet()) {
                 try {
-                    en.getValue().getSocket().setSoTimeout(1000);
                     msg = en.getValue().getString();
+                    if (msg.equals(" "))
                     en.getValue().close();//close the connection
                     System.out.println("Coordinator RECEIVE:From " + en.getKey() + ": " + msg);
                 }catch (IOException exe){
 
                 }
         }
+        //checking
+        return msg;
     }
     private ArrayList<Integer> stringsToInt(int startIndex,String split[]){
         ArrayList<Integer> list=new ArrayList<>();
@@ -121,6 +160,8 @@ public class Coordinator implements Runnable {
         return list;
     }
     private String formString(ArrayList<? extends Object> ids,String title){
+        if(ids.size()==0)
+            return "";
         String ret=title;
         for(int i=0;i<ids.size()-1;i++){
             ret+=ids.get(i)+",";
@@ -136,6 +177,11 @@ public class Coordinator implements Runnable {
         }
         return "";
     }
-
+    public static void main(String[] args) {
+        try {
+            Coordinator cord = new Coordinator(args);
+            cord.run();
+        }catch (IOException exe){};
+    }
 }
 
